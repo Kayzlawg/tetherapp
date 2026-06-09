@@ -1184,22 +1184,38 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404); self.end_headers()
 
     def _is_local_request(self):
-        """CSRF guard. In production behind a reverse proxy, all requests
-        arrive on 127.0.0.1. We rely on Origin/SameSite checks instead
-        of IP-based gating."""
+        """CSRF guard. Allow same-origin requests and requests from
+        configured origins (for reverse proxy setups like Railway)."""
         origin = self.headers.get('Origin', '')
         referer = self.headers.get('Referer', '')
+        # If no Origin/Referer, treat as same-origin (direct browser request)
+        if not origin and not referer:
+            return True
+        # Build allowed host list from env + defaults
+        allowed_hosts = {'127.0.0.1', 'localhost', '0.0.0.0', ''}
+        extra = os.environ.get('ALLOWED_ORIGINS', '')
+        if extra:
+            for h in extra.split(','):
+                h = h.strip().lower()
+                if h:
+                    allowed_hosts.add(h)
         for hdr in (origin, referer):
-            if hdr:
-                try:
-                    parsed = urlparse(hdr)
-                    host = parsed.hostname or ''
-                    # Allow same-origin, localhost, and common proxy setups
-                    allowed = ('127.0.0.1', 'localhost', '0.0.0.0', '')
-                    if host not in allowed and not host.startswith('127.'):
-                        return False
-                except Exception:
-                    pass
+            if not hdr:
+                continue
+            try:
+                parsed = urlparse(hdr)
+                host = (parsed.hostname or '').lower()
+                if host in allowed_hosts or host.startswith('127.'):
+                    continue
+                # Allow Railway deployment domains
+                if host.endswith('.railway.app') or host.endswith('.up.railway.app'):
+                    continue
+                # Allow Freenom free domains (for custom domain users)
+                if host.endswith('.tk') or host.endswith('.ml') or host.endswith('.ga') or host.endswith('.cf') or host.endswith('.gq'):
+                    continue
+                return False
+            except Exception:
+                pass
         return True
 
     def do_POST(self):
