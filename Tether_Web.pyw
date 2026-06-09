@@ -1448,6 +1448,24 @@ def _cleanup_worker():
 _cleanup_thread = threading.Thread(target=_cleanup_worker, daemon=True)
 _cleanup_thread.start()
 
+def _load_cookies_from_env():
+    """If YOUTUBE_COOKIES env var is set, write its contents to a cookies file
+    so yt-dlp can use it. This avoids committing secrets to git."""
+    cookies_env = os.environ.get('YOUTUBE_COOKIES', '')
+    if not cookies_env:
+        return
+    cookies_path = os.path.join(SCRIPT_DIR, 'youtube.com_cookies.txt')
+    try:
+        # Support both raw content and base64-encoded content
+        if cookies_env.startswith('base64:'):
+            content = base64.b64decode(cookies_env[7:]).decode('utf-8')
+        else:
+            content = cookies_env
+        with open(cookies_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+    except Exception:
+        pass  # if it fails, yt-dlp will just run without cookies
+
 def kill_existing_tether():
     """Kill other Tether instances. Cross-platform."""
     try:
@@ -1490,6 +1508,7 @@ def kill_existing_tether():
 
 def main():
     kill_existing_tether()
+    _load_cookies_from_env()
     if not check_yt_dlp(): install_yt_dlp()
     os.makedirs(DOWNLOADS_DIR, exist_ok=True)
     port = int(os.environ.get("PORT", os.environ.get("TETHER_PORT", 3187)))
