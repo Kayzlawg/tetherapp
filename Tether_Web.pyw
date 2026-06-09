@@ -26,9 +26,10 @@ _NO_WINDOW = 0x08000000 if _plat.system() == 'Windows' else 0
 
 # --- Paths ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DOWNLOADS_DIR = os.environ.get("DOWNLOADS_DIR", os.path.join(os.path.expanduser("~"), "tether_downloads"))
-# Render's filesystem is read-only except /tmp — redirect downloads there
-if os.path.exists("/opt/render") and not os.environ.get("DOWNLOADS_DIR"):
+_home_downloads = os.path.join(os.path.expanduser("~"), "tether_downloads")
+DOWNLOADS_DIR = os.environ.get("DOWNLOADS_DIR", _home_downloads)
+# If the default downloads dir isn't writable (e.g. Render, Railway), fall back to /tmp
+if not os.environ.get("DOWNLOADS_DIR") and not os.access(os.path.dirname(_home_downloads) or "/", os.W_OK):
     DOWNLOADS_DIR = "/tmp/tether_downloads"
 ICON_PATH = os.path.join(SCRIPT_DIR, "icon.ico")
 
