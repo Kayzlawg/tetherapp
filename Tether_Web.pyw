@@ -27,6 +27,9 @@ _NO_WINDOW = 0x08000000 if _plat.system() == 'Windows' else 0
 # --- Paths ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.environ.get("DOWNLOADS_DIR", os.path.join(os.path.expanduser("~"), "tether_downloads"))
+# Render's filesystem is read-only except /tmp — redirect downloads there
+if os.path.exists("/opt/render") and not os.environ.get("DOWNLOADS_DIR"):
+    DOWNLOADS_DIR = "/tmp/tether_downloads"
 ICON_PATH = os.path.join(SCRIPT_DIR, "icon.ico")
 
 def get_downloads_dir(): return DOWNLOADS_DIR
@@ -1242,12 +1245,9 @@ class Handler(BaseHTTPRequestHandler):
             platform, _ = detect_platform(url)
             if not platform: self._json({"error": "not a recognized video URL"}); return
             try:
-                cookies_file = os.path.join(SCRIPT_DIR, "youtube.com_cookies.txt")
                 cmd = [sys.executable, "-m", "yt_dlp", "-F", "--no-playlist",
-                       "--no-progress", "--no-warnings", "--socket-timeout", "30"]
-                if os.path.isfile(cookies_file):
-                    cmd += ["--cookies", cookies_file]
-                cmd.append(url)
+                       "--no-progress", "--no-warnings", "--socket-timeout", "30",
+                       "--cookies-from-browser", "firefox", url]
                 result = _run_yt_dlp(cmd, timeout=60)
                 combined = result.stdout + "\n" + result.stderr
                 formats = _parse_formats(combined)
@@ -1303,7 +1303,6 @@ class Handler(BaseHTTPRequestHandler):
                 fmt_args = fmt_args + ["--merge-output-format", "mp4"]
             else:
                 fmt_args = fmt_args + ["--merge-output-format", "mp4"]
-            cookies_file = os.path.join(SCRIPT_DIR, "youtube.com_cookies.txt")
             cmd = [
                 sys.executable, "-m", "yt_dlp", "--newline",
                 "--progress-template",
@@ -1314,10 +1313,9 @@ class Handler(BaseHTTPRequestHandler):
                 "--no-playlist", "--restrict-filenames",
                 "--socket-timeout", "30",
                 "--max-filesize", "1610612736",
+                "--cookies-from-browser", "firefox",
+                url,
             ]
-            if os.path.isfile(cookies_file):
-                cmd += ["--cookies", cookies_file]
-            cmd.append(url)
             def run_dl():
                 global active_processes
                 try:
@@ -1448,24 +1446,6 @@ def _cleanup_worker():
 _cleanup_thread = threading.Thread(target=_cleanup_worker, daemon=True)
 _cleanup_thread.start()
 
-def _load_cookies_from_env():
-    """If YOUTUBE_COOKIES env var is set, write its contents to a cookies file
-    so yt-dlp can use it. This avoids committing secrets to git."""
-    cookies_env = os.environ.get('YOUTUBE_COOKIES', '')
-    if not cookies_env:
-        return
-    cookies_path = os.path.join(SCRIPT_DIR, 'youtube.com_cookies.txt')
-    try:
-        # Support both raw content and base64-encoded content
-        if cookies_env.startswith('base64:'):
-            content = base64.b64decode(cookies_env[7:]).decode('utf-8')
-        else:
-            content = cookies_env
-        with open(cookies_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-    except Exception:
-        pass  # if it fails, yt-dlp will just run without cookies
-
 def kill_existing_tether():
     """Kill other Tether instances. Cross-platform."""
     try:
@@ -1508,7 +1488,6 @@ def kill_existing_tether():
 
 def main():
     kill_existing_tether()
-    _load_cookies_from_env()
     if not check_yt_dlp(): install_yt_dlp()
     os.makedirs(DOWNLOADS_DIR, exist_ok=True)
     port = int(os.environ.get("PORT", os.environ.get("TETHER_PORT", 3187)))
