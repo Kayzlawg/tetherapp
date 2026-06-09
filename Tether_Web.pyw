@@ -1242,9 +1242,12 @@ class Handler(BaseHTTPRequestHandler):
             platform, _ = detect_platform(url)
             if not platform: self._json({"error": "not a recognized video URL"}); return
             try:
+                cookies_file = os.path.join(SCRIPT_DIR, "youtube.com_cookies.txt")
                 cmd = [sys.executable, "-m", "yt_dlp", "-F", "--no-playlist",
-                       "--no-progress", "--no-warnings", "--socket-timeout", "30",
-                       "--cookies-from-browser", "firefox", url]
+                       "--no-progress", "--no-warnings", "--socket-timeout", "30"]
+                if os.path.isfile(cookies_file):
+                    cmd += ["--cookies", cookies_file]
+                cmd.append(url)
                 result = _run_yt_dlp(cmd, timeout=60)
                 combined = result.stdout + "\n" + result.stderr
                 formats = _parse_formats(combined)
@@ -1300,6 +1303,7 @@ class Handler(BaseHTTPRequestHandler):
                 fmt_args = fmt_args + ["--merge-output-format", "mp4"]
             else:
                 fmt_args = fmt_args + ["--merge-output-format", "mp4"]
+            cookies_file = os.path.join(SCRIPT_DIR, "youtube.com_cookies.txt")
             cmd = [
                 sys.executable, "-m", "yt_dlp", "--newline",
                 "--progress-template",
@@ -1310,9 +1314,10 @@ class Handler(BaseHTTPRequestHandler):
                 "--no-playlist", "--restrict-filenames",
                 "--socket-timeout", "30",
                 "--max-filesize", "1610612736",
-                "--cookies-from-browser", "firefox",
-                url,
             ]
+            if os.path.isfile(cookies_file):
+                cmd += ["--cookies", cookies_file]
+            cmd.append(url)
             def run_dl():
                 global active_processes
                 try:
