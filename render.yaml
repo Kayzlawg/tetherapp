@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: tether-app
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python Tether_Web.pyw
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: TETHER_HOST
+        value: "0.0.0.0"
